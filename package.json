@@ -1,0 +1,30 @@
+{
+  "name": "task-management-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon src/server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RybchynskyiDaniil/task-management-backend.git"
+  },
+  "keywords": [],
+  "author": "Daniil Rybchynskyi <rybchynskyidaniil@gmail.com>",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/RybchynskyiDaniil/task-management-backend/issues"
+  },
+  "homepage": "https://github.com/RybchynskyiDaniil/task-management-backend#readme",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.2.1",
+    "globals": "^17.5.0",
+    "nodemon": "^3.1.14"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}
