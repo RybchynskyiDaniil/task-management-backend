@@ -1,7 +1,8 @@
 import { User } from "../models/User.js";
 import bcrypt from 'bcryptjs';
 import createHttpError from 'http-errors';
-import jwt from 'jsonwebtoken';
+import { createSession, setSessionCookies } from "../services/auth.js";
+import { Session } from "../models/Session.js";
 
 export const register = async (req, res) => {
   const { name, email, password } = req.body;
@@ -19,6 +20,9 @@ export const register = async (req, res) => {
     email,
     password: hashedPassword,
   });
+
+  const newSession = await createSession(user._id);
+  setSessionCookies(res, newSession);
 
   res.status(201).json({
     message: 'User registered successfully',
@@ -42,11 +46,21 @@ export const login = async (req, res) => {
   throw createHttpError(401, 'Invalid credentials');
   }
 
-  const token = jwt.sign(
-  { userId: user._id },
-  process.env.JWT_SECRET,
-  { expiresIn: process.env.JWT_EXPIRES_IN }
-);
-  res.status(200).json({ token, user });
+  await Session.deleteOne({ userId: user._id });
+  const newSession = await createSession(user._id);
+  setSessionCookies(res, newSession);
+  
+  res.status(200).json(user);
+};
+
+export const logout = async (req, res) => {
+  const { sessionId } = req.cookies;
+  if (sessionId) {
+    await Session.deleteOne({ _id: sessionId });
+  }
+  res.clearCookie('sessionId');
+  res.clearCookie('accessToken');
+  res.clearCookie('refreshToken');
+  res.status(204).send();
 };
 

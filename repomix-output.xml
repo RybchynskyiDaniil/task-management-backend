@@ -44,56 +44,81 @@ The content is organized as follows:
 eslint.config.mjs
 package.json
 README.md
+src/constants/time.js
 src/controllers/authController.js
 src/db/connectMongoDB.js
 src/middleware/errorHandler.js
 src/middleware/logger.js
 src/middleware/notFoundHandler.js
+src/models/Session.js
 src/models/User.js
 src/routes/authRouter.js
 src/server.js
+src/services/auth.js
 src/validations/userValidation.js
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
 
-<file path="src/validations/userValidation.js">
-import { Joi, Segments } from 'celebrate';
+<file path="src/constants/time.js">
+export const FIFTEEN_MINUTES = 15 * 60 * 1000;
+export const ONE_DAY = 24 * 60 * 60 * 1000;
+</file>
 
-export const registerUserSchema = {
-  [Segments.BODY]: Joi.object({
-    name: Joi.string().min(3).max(30).messages({
-      "string.base": "Name must be a string",
-      "string.min": "Name should have at least {#limit} characters",
-      "string.max": "Name should have at most {#limit} characters",
-    }),
-    email: Joi.string().email().required().messages({
-      "string.base": "Email must be a string",
-      "string.email": "Email must be a valid email address",
-      "any.required": "Email is required",
-    }),
-    password: Joi.string().min(8).required().messages({
-      "string.base": "Password must be a string",
-      "string.min": "Password should have at least {#limit} characters",
-      "any.required": "Password is required",
-    }),
-  }),
+<file path="src/models/Session.js">
+import { model, Schema } from "mongoose";
+
+const sessionSchema = new Schema({
+    userId: { type: Schema.Types.ObjectId, required: true },
+    accessToken: { type: String, required: true },
+    refreshToken: { type: String, required: true },
+    accessTokenValidUntil: { type: Date, required: true },
+    refreshTokenValidUntil: { type: Date, required: true },
+},
+    { timestamps: true },
+);
+export const Session = model('Session', sessionSchema);
+</file>
+
+<file path="src/services/auth.js">
+import crypto from 'crypto';
+import { FIFTEEN_MINUTES, ONE_DAY } from '../constants/time.js';
+import { Session } from '../models/Session.js';
+
+export const createSession = async (userId) => {
+    const accessToken = crypto.randomUUID();
+    const refreshToken = crypto.randomUUID();
+    return Session.create({
+        userId,
+        accessToken,
+        refreshToken,
+        accessTokenValidUntil: new Date(Date.now() + FIFTEEN_MINUTES),
+        refreshTokenValidUntil: new Date(Date.now() + ONE_DAY),
+    });
 };
 
+export const setSessionCookies = (res, session) => {
+    res.cookie('accessToken', session.accessToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        maxAge: FIFTEEN_MINUTES,
+    });
 
-export const loginUserSchema = {
-  [Segments.BODY]: Joi.object({
-  email: Joi.string().email().required().messages({
-      "string.base": "Email must be a string",
-      "string.email": "Email must be a valid email address",
-      "any.required": "Email is required",
-    }),
-    password: Joi.string().required().messages({
-      "string.base": "Password must be a string",
-      "any.required": "Password is required",
-    }),
-  })
+    res.cookie('refreshToken', session.refreshToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        maxAge: ONE_DAY,
+    });
+
+    res.cookie('sessionId', session._id, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        maxAge: ONE_DAY,
+    });
 };
 </file>
 
@@ -282,28 +307,6 @@ try {
 };
 </file>
 
-<file path="src/middleware/errorHandler.js">
-import { HttpError } from "http-errors";
-
-export const errorHandler = (err, req, res, next) => {
-console.error("Error Middleware:", err);
-
-if (err instanceof HttpError) {
-return res.status(err.status).json({
-message: err.message || err.name,
-});
-}
-
-    const isProd = process.env.NODE_ENV === "production";
-
-    res.status(500).json({
-        message: isProd
-            ? "Something went wrong. Please try again later."
-            : err.message,
-    });
-};
-</file>
-
 <file path="src/middleware/logger.js">
 import pino from 'pino-http';
 
@@ -326,6 +329,67 @@ export const logger = pino({
 export const notFoundHandler = (req, res) => {
     res.status(404).json({message: 'Route not found'});   
  };
+</file>
+
+<file path="src/validations/userValidation.js">
+import { Joi, Segments } from 'celebrate';
+
+export const registerUserSchema = {
+  [Segments.BODY]: Joi.object({
+    name: Joi.string().min(3).max(30).messages({
+      "string.base": "Name must be a string",
+      "string.min": "Name should have at least {#limit} characters",
+      "string.max": "Name should have at most {#limit} characters",
+    }),
+    email: Joi.string().email().required().messages({
+      "string.base": "Email must be a string",
+      "string.email": "Email must be a valid email address",
+      "any.required": "Email is required",
+    }),
+    password: Joi.string().min(8).required().messages({
+      "string.base": "Password must be a string",
+      "string.min": "Password should have at least {#limit} characters",
+      "any.required": "Password is required",
+    }),
+  }),
+};
+
+
+export const loginUserSchema = {
+  [Segments.BODY]: Joi.object({
+  email: Joi.string().email().required().messages({
+      "string.base": "Email must be a string",
+      "string.email": "Email must be a valid email address",
+      "any.required": "Email is required",
+    }),
+    password: Joi.string().required().messages({
+      "string.base": "Password must be a string",
+      "any.required": "Password is required",
+    }),
+  })
+};
+</file>
+
+<file path="src/middleware/errorHandler.js">
+import { HttpError } from "http-errors";
+
+export const errorHandler = (err, req, res, next) => {
+console.error("Error Middleware:", err);
+
+if (err instanceof HttpError) {
+return res.status(err.status).json({
+message: err.message || err.name,
+});
+}
+
+    const isProd = process.env.NODE_ENV === "production";
+
+    res.status(500).json({
+        message: isProd
+            ? "Something went wrong. Please try again later."
+            : err.message,
+    });
+};
 </file>
 
 <file path="src/models/User.js">
@@ -369,14 +433,14 @@ export const User = mongoose.model('User', userSchema);
 <file path="src/routes/authRouter.js">
 import { Router } from 'express';
 import { celebrate } from 'celebrate';
-import { register, login } from '../controllers/authController.js';
+import { register, login, logout } from '../controllers/authController.js';
 import { registerUserSchema , loginUserSchema  } from '../validations/userValidation.js';
 
 
 const authRouter = Router();
 authRouter.post('/register', celebrate(registerUserSchema), register);
 authRouter.post('/login', celebrate(loginUserSchema), login);
-
+authRouter.post('/auth/logout', logout);
 
 export default authRouter;
 </file>
@@ -385,7 +449,8 @@ export default authRouter;
 import { User } from "../models/User.js";
 import bcrypt from 'bcryptjs';
 import createHttpError from 'http-errors';
-import jwt from 'jsonwebtoken';
+import { createSession, setSessionCookies } from "../services/auth.js";
+import { Session } from "../models/Session.js";
 
 export const register = async (req, res) => {
   const { name, email, password } = req.body;
@@ -403,6 +468,9 @@ export const register = async (req, res) => {
     email,
     password: hashedPassword,
   });
+
+  const newSession = await createSession(user._id);
+  setSessionCookies(res, newSession);
 
   res.status(201).json({
     message: 'User registered successfully',
@@ -426,12 +494,22 @@ export const login = async (req, res) => {
   throw createHttpError(401, 'Invalid credentials');
   }
 
-  const token = jwt.sign(
-  { userId: user._id },
-  process.env.JWT_SECRET,
-  { expiresIn: process.env.JWT_EXPIRES_IN }
-);
-  res.status(200).json({ token, user });
+  await Session.deleteOne({ userId: user._id });
+  const newSession = await createSession(user._id);
+  setSessionCookies(res, newSession);
+  
+  res.status(200).json(user);
+};
+
+export const logout = async (req, res) => {
+  const { sessionId } = req.cookies;
+  if (sessionId) {
+    await Session.deleteOne({ _id: sessionId });
+  }
+  res.clearCookie('sessionId');
+  res.clearCookie('accessToken');
+  res.clearCookie('refreshToken');
+  res.status(204).send();
 };
 </file>
 
@@ -465,6 +543,7 @@ export const login = async (req, res) => {
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "celebrate": "^15.0.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
@@ -488,6 +567,7 @@ import { notFoundHandler } from "./middleware/notFoundHandler.js";
 import { errors } from "celebrate";
 import { errorHandler } from "./middleware/errorHandler.js";
 import authRouter from './routes/authRouter.js';
+import cookieParser from "cookie-parser";
 
 
 const app = express();
@@ -495,6 +575,7 @@ const PORT = process.env.PORT ?? 3000;
 app.use(logger);
 app.use(express.json());
 app.use(cors());
+app.use(cookieParser());
 
 app.use('/api/auth', authRouter);
 app.use(notFoundHandler);
