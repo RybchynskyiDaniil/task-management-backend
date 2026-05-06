@@ -7,6 +7,7 @@ import { notFoundHandler } from "./middleware/notFoundHandler.js";
 import { errors } from "celebrate";
 import { errorHandler } from "./middleware/errorHandler.js";
 import authRouter from './routes/authRouter.js';
+import taskRouter from './routes/taskRouter.js';
 import cookieParser from "cookie-parser";
 
 
@@ -18,6 +19,7 @@ app.use(cors());
 app.use(cookieParser());
 
 app.use('/api/auth', authRouter);
+app.use('/api/tasks', taskRouter);
 app.use(notFoundHandler);
 app.use(errors());
 app.use(errorHandler);

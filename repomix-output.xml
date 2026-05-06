@@ -46,13 +46,17 @@ package.json
 README.md
 src/constants/time.js
 src/controllers/authController.js
+src/controllers/taskController.js
 src/db/connectMongoDB.js
+src/middleware/authenticate.js
 src/middleware/errorHandler.js
 src/middleware/logger.js
 src/middleware/notFoundHandler.js
 src/models/Session.js
+src/models/Task.js
 src/models/User.js
 src/routes/authRouter.js
+src/routes/taskRouter.js
 src/server.js
 src/services/auth.js
 src/validations/userValidation.js
@@ -61,65 +65,131 @@ src/validations/userValidation.js
 <files>
 This section contains the contents of the repository's files.
 
-<file path="src/constants/time.js">
-export const FIFTEEN_MINUTES = 15 * 60 * 1000;
-export const ONE_DAY = 24 * 60 * 60 * 1000;
-</file>
+<file path="src/controllers/taskController.js">
+import { Task } from '../models/Task.js';
+// import createHttpError from 'http-errors';
 
-<file path="src/models/Session.js">
-import { model, Schema } from "mongoose";
-
-const sessionSchema = new Schema({
-    userId: { type: Schema.Types.ObjectId, required: true },
-    accessToken: { type: String, required: true },
-    refreshToken: { type: String, required: true },
-    accessTokenValidUntil: { type: Date, required: true },
-    refreshTokenValidUntil: { type: Date, required: true },
-},
-    { timestamps: true },
-);
-export const Session = model('Session', sessionSchema);
-</file>
-
-<file path="src/services/auth.js">
-import crypto from 'crypto';
-import { FIFTEEN_MINUTES, ONE_DAY } from '../constants/time.js';
-import { Session } from '../models/Session.js';
-
-export const createSession = async (userId) => {
-    const accessToken = crypto.randomUUID();
-    const refreshToken = crypto.randomUUID();
-    return Session.create({
+export const createTask = async (req, res) => {
+    const { title, description, priority, dueDate } = req.body;
+    const userId = req.user._id;
+    const task = await Task.create({
+        title,
+        description,
+        priority,
+        dueDate,
         userId,
-        accessToken,
-        refreshToken,
-        accessTokenValidUntil: new Date(Date.now() + FIFTEEN_MINUTES),
-        refreshTokenValidUntil: new Date(Date.now() + ONE_DAY),
     });
+    res.status(201).json(task);
 };
+</file>
 
-export const setSessionCookies = (res, session) => {
-    res.cookie('accessToken', session.accessToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        maxAge: FIFTEEN_MINUTES,
-    });
+<file path="src/middleware/authenticate.js">
+// Middleware authenticate виконує роль «охоронця» приватних даних.
+// Він перевіряє токени, сесію та користувача.
+// Якщо перевірка успішна — доступ до колекції студентів відкривається.
+// Якщо ні — користувач отримує відповідь з 401 Unauthorized.
+// модуль 4 Middleware аутентифікації
 
-    res.cookie('refreshToken', session.refreshToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        maxAge: ONE_DAY,
-    });
 
-    res.cookie('sessionId', session._id, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        maxAge: ONE_DAY,
-    });
+// v Middleware аутентифікації
+
+// V Зв'язок між моделями
+
+// v Приватні дані
+
+// Матеріали
+
+// Уроки
+
+// Домашнє завдання
+
+// 5. Модуль 5. Пошта та
+// зображен
+// ження
+
+import createHttpError from "http-errors";
+import { Session } from "../models/Session.js";
+import { User } from "../models/User.js";
+
+export const authenticate = async (req, res, next) => {
+  const { sessionId, accessToken } = req.cookies;
+
+  if (!sessionId || !accessToken) {
+    throw createHttpError(401, 'Missing session credentials');
+  }
+
+  const session = await Session.findOne({ _id: sessionId, accessToken });
+
+  if (!session) {
+    throw createHttpError(401, 'Session not found');
+  }
+
+  const isAccessTokenExpired = session.accessTokenValidUntil < new Date();
+  if (isAccessTokenExpired) {
+    throw createHttpError(401, 'Access token expired');
+  }
+
+  const user = await User.findById(session.userId);
+  if (!user) {
+    throw createHttpError(401, 'User not found');
+  }
+
+  req.user = user;
+  next();
 };
+</file>
+
+<file path="src/models/Task.js">
+import mongoose, { Schema } from "mongoose";
+
+const taskSchema = new mongoose.Schema({
+    title: {
+        type: String,
+        required: true,
+        trim: true,
+    },
+    description: {
+        type: String,
+        
+    },
+    status: {
+        type: String, 
+        enum: ['pending', 'inProgress', 'completed'],
+        default: 'pending'
+    },
+    priority: {
+        type: String,
+        enum: ['low', 'medium', 'high'],
+        default: 'medium',
+    },
+    dueDate: {
+        type: Date,
+        
+    },
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
+    },
+},
+    {
+        timestamps: true
+    });
+
+export const Task = mongoose.model('Task',taskSchema );
+</file>
+
+<file path="src/routes/taskRouter.js">
+import { Router } from 'express';
+import { authenticate } from '../middleware/authenticate.js';
+import { createTask } from '../controllers/taskController.js';
+
+const taskRouter = Router();
+
+taskRouter.use(authenticate);
+taskRouter.post('/', createTask);
+
+export default taskRouter;
 </file>
 
 <file path=".gitignore">
@@ -292,6 +362,11 @@ export default defineConfig([
 # task-management-backend
 </file>
 
+<file path="src/constants/time.js">
+export const FIFTEEN_MINUTES = 15 * 60 * 1000;
+export const ONE_DAY = 24 * 60 * 60 * 1000;
+</file>
+
 <file path="src/db/connectMongoDB.js">
 import mongoose from "mongoose";
 
@@ -329,6 +404,62 @@ export const logger = pino({
 export const notFoundHandler = (req, res) => {
     res.status(404).json({message: 'Route not found'});   
  };
+</file>
+
+<file path="src/models/Session.js">
+import { model, Schema } from "mongoose";
+
+const sessionSchema = new Schema({
+    userId: { type: Schema.Types.ObjectId, required: true },
+    accessToken: { type: String, required: true },
+    refreshToken: { type: String, required: true },
+    accessTokenValidUntil: { type: Date, required: true },
+    refreshTokenValidUntil: { type: Date, required: true },
+},
+    { timestamps: true },
+);
+export const Session = model('Session', sessionSchema);
+</file>
+
+<file path="src/services/auth.js">
+import crypto from 'crypto';
+import { FIFTEEN_MINUTES, ONE_DAY } from '../constants/time.js';
+import { Session } from '../models/Session.js';
+
+export const createSession = async (userId) => {
+    const accessToken = crypto.randomUUID();
+    const refreshToken = crypto.randomUUID();
+    return Session.create({
+        userId,
+        accessToken,
+        refreshToken,
+        accessTokenValidUntil: new Date(Date.now() + FIFTEEN_MINUTES),
+        refreshTokenValidUntil: new Date(Date.now() + ONE_DAY),
+    });
+};
+
+export const setSessionCookies = (res, session) => {
+    res.cookie('accessToken', session.accessToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        maxAge: FIFTEEN_MINUTES,
+    });
+
+    res.cookie('refreshToken', session.refreshToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        maxAge: ONE_DAY,
+    });
+
+    res.cookie('sessionId', session._id, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        maxAge: ONE_DAY,
+    });
+};
 </file>
 
 <file path="src/validations/userValidation.js">
@@ -433,14 +564,15 @@ export const User = mongoose.model('User', userSchema);
 <file path="src/routes/authRouter.js">
 import { Router } from 'express';
 import { celebrate } from 'celebrate';
-import { register, login, logout } from '../controllers/authController.js';
+import { register, login, logout, refreshUserSession } from '../controllers/authController.js';
 import { registerUserSchema , loginUserSchema  } from '../validations/userValidation.js';
 
 
 const authRouter = Router();
 authRouter.post('/register', celebrate(registerUserSchema), register);
 authRouter.post('/login', celebrate(loginUserSchema), login);
-authRouter.post('/auth/logout', logout);
+authRouter.post('/logout', logout);
+authRouter.post('/refresh', refreshUserSession);
 
 export default authRouter;
 </file>
@@ -511,6 +643,39 @@ export const logout = async (req, res) => {
   res.clearCookie('refreshToken');
   res.status(204).send();
 };
+
+export const refreshUserSession = async (req, res) => {
+  const { sessionId, refreshToken } = req.cookies;
+  if (!sessionId || !refreshToken) {
+   throw createHttpError(401,'Missing session credentials');
+  };
+
+  const session = await Session.findOne({
+    _id: sessionId,
+    refreshToken,  
+  });
+  if (!session) {
+    throw createHttpError(401, 'Session not found');
+  }
+
+  const isSessionTokenExpired = session.refreshTokenValidUntil < new Date();
+  if (isSessionTokenExpired) {
+    await session.deleteOne();
+    res.clearCookie('sessionId');
+    res.clearCookie('accessToken');
+    res.clearCookie('refreshToken');
+    throw createHttpError(401, 'Session token expired');
+  };
+  
+  await session.deleteOne();
+
+  const newSession = await createSession(session.userId);
+  setSessionCookies(res, newSession);
+  
+  res.status(200).json({
+    message:'Session refreshed',  
+  });
+ };
 </file>
 
 <file path="package.json">
