@@ -10,4 +10,6 @@ authRouter.post('/login', celebrate(loginUserSchema), login);
 authRouter.post('/logout', logout);
 authRouter.post('/refresh', refreshUserSession);
 
+
+
 export default authRouter;
