@@ -15,9 +15,20 @@ export const createTask = async (req, res) => {
 };
 
 export const getTask = async (req, res) => {
+    const { page = 1, perPage = 10, status, priority, sortBy = '_id', sortOrder = 'asc', search } = req.query;
+    const skip = (page - 1) * perPage;
     const userId = req.user._id;
-    const tasks = await Task.find({ userId });
-    res.status(200).json(tasks);   
+    const tasksQuery = Task.find({ userId });
+    if (status) tasksQuery.where('status').equals(status);
+    if (priority) tasksQuery.where('priority').equals(priority);
+    if (search) tasksQuery.where({ title: { $regex: search, $options: 'i' } });
+
+    const [totalItems, tasks] = await Promise.all([
+    tasksQuery.clone().countDocuments(),
+    tasksQuery.skip(skip).limit(Number(perPage)).sort({[sortBy]:sortOrder}),
+    ]);
+    const totalPages = Math.ceil(totalItems / perPage);
+    res.status(200).json({ page, perPage, totalItems, totalPages, tasks });   
 };
 
 export const getTaskById = async (req, res) => {

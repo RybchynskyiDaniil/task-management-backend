@@ -28,3 +28,15 @@ export const updateTaskSchema = {
         dueDate:Joi.date()
 })
 };
+
+export const getTasksSchema = {
+    [Segments.QUERY]: Joi.object({
+        page: Joi.number().integer().min(1).default(1),
+        perPage: Joi.number().integer().min(5).max(20).default(10),
+        status: Joi.string().valid('pending', 'inProgress', 'completed'),
+        priority: Joi.string().valid('low', 'medium', 'high'),
+        sortBy: Joi.string().valid('_id', 'title', 'createdAt', 'dueDate'),
+        sortOrder: Joi.string().valid('asc', 'desc'),
+        search: Joi.string().allow(""),
+})    
+};
